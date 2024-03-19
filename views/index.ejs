@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>NOT Pudge Wars Prototype v0.0.4-alpha</title>
+        <link rel="stylesheet" type="text/css" href="https://yarnpkg.com/en/package/normalize.css">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+        <script type="text/javascript" src="/socket.io/socket.io.js"></script>
+        <link rel="stylesheet" href="/styles.css">
+        <script>
+            // REFACTOR: Code too long. Turn this into a class or something then save in a separate file.
+            $(document).ready(() => {
+                const socket = io();
+                let id; // TODO: Move this to initial socket controller.
+                let mouseX;
+                let mouseY;
+                let players = {};
+                let enemyFireColor = "red";
+                let myFireColor = "green";
+
+                $("#viewer").on("mousemove", (mouse) => {
+                    mouseX = mouse.clientX;
+                    mouseY = mouse.clientY;
+                })
+
+                // REFACTOR: Must not directly call players array unless contained as a method to a class.
+                const renderPlayer = (player) => {
+                    console.log(players[player])
+                    $("#viewer").append(`<div id="${player}"></div>`);
+                    $(`#${player}`).css("position", "absolute");
+                    $(`#${player}`).css("top", players[player].position.y);
+                    $(`#${player}`).css("left", players[player].position.x);
+                    $(`#${player}`).css("background-color", "orange");
+                    $(`#${player}`).css("height", players[player].stats.move * 2);
+                    $(`#${player}`).css("width", players[player].stats.move * 2);
+                }
+
+                // TODO: Move id here:
+                socket.on("manager", (data) => {
+                    if (data.type == "new") {
+                        id = data.value;
+
+                        socket.emit("action", {
+                            source: id,
+                            type: "new",
+                            value: {
+                                name: "Sample"
+                            }
+                        });
+                    }
+
+                    else if (data.type == "new player emit") {
+                        players = data.value;
+                        console.log(players);
+                        for (const player in players) {
+                            renderPlayer(player);
+                        }
+                    }
+
+                    else if (data.type == "new player broadcast") {
+                        players[data.source] = data.value;
+                        console.log(players)
+                        renderPlayer(data.source);
+                    }
+
+                    else if (data.type == "player move") {
+                        console.log(players[data.source])
+                        players[data.source].position.x = data.value.x
+                        players[data.source].position.y = data.value.y
+                        console.log(players[data.source].position)
+                        $(`#${data.source}`).css("top", players[data.source].position.y);
+                        $(`#${data.source}`).css("left", players[data.source].position.x);
+                    }
+
+                    else if (data.type == "player kill") {
+                        console.log(data.source, "killed", data.value.id)
+                        $(`#${data.value.id}`).remove()
+
+                        $("#announcements").append(`<p>${data.value.id} was killed by ${data.source}</p>`);
+
+                        // If the killed player is the client's hero:
+                        if (socket.id == data.value.id) {
+                            socket.disconnect(); // https://stackoverflow.com/questions/5048231/force-client-disconnect-from-server-with-socket-io-and-nodejs
+                            $("#viewer").html("");
+                            $("#viewer").html(`<h1 class="text-center">Game Over!</h1><p class="text-center">Hit refresh to play again!</p>`);
+                        }
+                    }
+
+                    else if (data.type == "hook fire animation self own") {
+                        console.log(data.value.position)
+                        const rng = Math.floor(Math.random() * 100);
+                        $("#viewer").append(`<div id="${rng}"></div>`);
+                        $(`#${rng}`).css("height", "50px");
+                        $(`#${rng}`).css("width", "50px");
+                        $(`#${rng}`).css("background-color", myFireColor);
+                        $(`#${rng}`).css("opacity", "0.2");
+                        $(`#${rng}`).css("border-radius", "50%");
+                        $(`#${rng}`).css("position", "absolute");
+                        $(`#${rng}`).css("top", data.value.position.y);
+                        $(`#${rng}`).css("left", data.value.position.x);
+
+                        new Promise((resolve) => {
+                            setTimeout(() => {
+                                $(`#${rng}`).remove();
+                                resolve();
+                            }, 1500)
+                        })
+                    }
+
+                    // Refactor: Repeats code for hook fire animation SELF own.
+                    else if (data.type == "hook fire animation other own") {
+                        console.log(data.value.position)
+                        const rng = Math.floor(Math.random() * 100);
+                        $("#viewer").append(`<div id="${rng}"></div>`);
+                        $(`#${rng}`).css("height", "50px");
+                        $(`#${rng}`).css("width", "50px");
+                        $(`#${rng}`).css("background-color", enemyFireColor); // enemyFireColor is the only thing that differs between the two.
+                        $(`#${rng}`).css("opacity", "0.2");
+                        $(`#${rng}`).css("border-radius", "50%");
+                        $(`#${rng}`).css("position", "absolute");
+                        $(`#${rng}`).css("top", data.value.position.y);
+                        $(`#${rng}`).css("left", data.value.position.x);
+
+                        new Promise((resolve) => {
+                            setTimeout(() => {
+                                $(`#${rng}`).remove();
+                                resolve();
+                            }, 1500)
+                        })
+                    }
+                });
+
+                // Keypress inputs
+                $(document).on("keypress", (key) => {
+                    console.log(key.which)
+                    if (key.which == 119) {
+                        console.log("W")
+                        socket.emit("action", {
+                            source: socket.id,
+                            type: "move",
+                            value: {
+                                x: 0,
+                                y: -1 * players[socket.id].stats.move
+                            }
+                        });
+                    }
+
+                    else if (key.which == 97) {
+                        console.log("A")
+                        socket.emit("action", {
+                            source: socket.id,
+                            type: "move",
+                            value: {
+                                x: -1 * players[socket.id].stats.move,
+                                y: 0
+                            }
+                        });
+                    }
+
+                    else if (key.which == 115) {
+                        console.log("S")
+                        socket.emit("action", {
+                            source: socket.id,
+                            type: "move",
+                            value: {
+                                x: 0,
+                                y: players[socket.id].stats.move
+                            }
+                        });
+                    }
+
+                    else if (key.which == 100) {
+                        console.log("D")
+                        socket.emit("action", {
+                            source: socket.id,
+                            type: "move",
+                            value: {
+                                x: players[socket.id].stats.move,
+                                y: 0
+                            }
+                        });
+                    }
+
+                    else if (key.which == 113) {
+                        console.log("Q")
+
+                        socket.emit("action", {
+                            source: socket.id,
+                            type: "skill",
+                            value: {
+                                name: "hook"
+                            }
+                        });
+                        console.log("Hero:", players[socket.id].position.x, players[socket.id].position.y)
+                        console.log("Mouse:", mouseX, mouseY)
+                    }
+                })
+
+                $("#viewer").click(() => {
+                    socket.emit("action", {
+                        source: socket.id,
+                        type: "skill",
+                        value: {
+                            name: "hook mouse",
+                            hero: {
+                                x: players[socket.id].position.x,
+                                y: players[socket.id].position.y
+                            },
+                            mouse: {
+                                x: mouseX,
+                                y: mouseY
+                            }
+                        }
+                    })  
+                });
+            });
+        </script>
+    </head>
+    <body class="bg-primary">
+        <div id="viewer" class="bg-light">
+        </div>
+        <div id="announcements" class="bg-secondary">
+            <h1>Instructions</h1>
+            <ul>
+                <li>Use <span>W</span>, <span>A</span>, <span>S</span>, and <span>D</span> to move.</li>
+                <li>Press <span>Q</span> to prepare your cannon. (No animation yet)</li>
+                <li>The cannon can fire at any part of the map. Press <span>Left Mouse Button</span> to fire.</li>
+                <li><span>Be Careful:</span> You can not move while holding your cannon. Other players can easily hit you.</li>
+                <li>It takes 6 hits to successfully kill a player.</li>
+                <li>Dodge other players' attacks and kill as many players as you can.</li>
+                <li>That's all and <span>Have Fun!</span></li>
+            </ul>
+        </div>
+    </body>
+</html>
